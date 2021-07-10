@@ -2,8 +2,32 @@ package interop
 
 import (
 	"reflect"
+	"sync"
+	"sync/atomic"
 	"unsafe"
 )
+
+type PinPtr uintptr
+
+var (
+	handles   sync.Map
+	handleIdx uintptr
+)
+
+func Pin(v interface{}) PinPtr {
+	h := atomic.AddUintptr(&handleIdx, 1)
+	if h == 0 {
+		panic("interop: ran out of handle space")
+	}
+	handles.Store(h, v)
+	return PinPtr(h)
+}
+
+func (h PinPtr) Unpin() {
+	if _, ok := handles.LoadAndDelete(uintptr(h)); !ok {
+		panic("interop: invalid Handle")
+	}
+}
 
 func AllocBytes(size int) []byte {
 	return unsafe.Slice((*byte)(Alloc(size)), size)
@@ -30,4 +54,3 @@ func AllocStruct(p interface{}) {
 	}
 	panic("AllocStruct argument must be a pointer to a pointer")
 }
-
