@@ -3,29 +3,26 @@ package interop
 import (
 	"reflect"
 	"sync"
-	"sync/atomic"
 	"unsafe"
 )
 
-type PinPtr uintptr
+var pinned sync.Map
 
-var (
-	handles   sync.Map
-	handleIdx uintptr
-)
-
-func Pin(v interface{}) PinPtr {
-	h := atomic.AddUintptr(&handleIdx, 1)
-	if h == 0 {
-		panic("interop: ran out of handle space")
+func Pin(x interface{}) {
+	v := reflect.ValueOf(x)
+	if v.Kind() != reflect.Ptr {
+		panic("interop: can't Pin non-pointer")
 	}
-	handles.Store(h, v)
-	return PinPtr(h)
+	pinned.Store(unsafe.Pointer(v.Pointer()), struct{}{})
 }
 
-func (h PinPtr) Unpin() {
-	if _, ok := handles.LoadAndDelete(uintptr(h)); !ok {
-		panic("interop: invalid Handle")
+func Unpin(x interface{}) {
+	v := reflect.ValueOf(x)
+	if v.Kind() != reflect.Ptr {
+		panic("interop: can't Unpin non-pointer")
+	}
+	if _, ok := pinned.LoadAndDelete(unsafe.Pointer(v.Pointer())); !ok {
+		panic("interop: pointer to Unpin not found")
 	}
 }
 
@@ -52,5 +49,5 @@ func AllocStruct(p interface{}) {
 			return
 		}
 	}
-	panic("AllocStruct argument must be a pointer to a pointer")
+	panic("interop: AllocStruct argument must be a pointer to a pointer")
 }
